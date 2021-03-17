@@ -1,0 +1,385 @@
+---
+title: "Analyse de l'impact de quelques facteurs sur le poids de bébés à la naissance"
+author: "Florent VALBON, Julien MASSIP (TP B1)"
+date: "23 décembre 2018"
+output:
+  html_notebook:
+    number_sections: yes
+    toc: yes
+linkcolor: red
+---
+
+Le but de ce rapport est d'établir des liens entre le poids à la naissance de bébés et plusieurs facteurs : 
+
+- le poids de naissance du bébé (en grammes) (BWT = birth weight),
+- tabagisme durant la grossesse (Y=oui; N=non) (SMOKE)
+- race de la mère (1=blanche; 2=noire; 3=autre) (RACE)
+- antécédents d'hypertension (Y=oui; N=non) (HT)
+- présence d'irritabilité utérine (Y=oui; N=non) (UI)
+
+
+```{r global_options, include=FALSE}
+knitr::opts_chunk$set(fig.align = 'center',fig.pos = 'h')
+library(magrittr)
+```
+
+Voici une partie du tableau de données utilisé pour l'étude : 
+
+```{r Initialisation, echo=FALSE}
+poids <- read.table("poids_naiss_2.txt", header=TRUE, sep = ":")
+head(poids)
+```
+
+```{r, include=FALSE}
+attach(poids)
+```
+
+
+#Plan d'expérience
+
+Observons dans un premier temps la répartition des individus dans les différents groupes : 
+
+
+```{r test, echo=FALSE}
+
+table(SMOKE,RACE,HT,UI)
+
+```
+
+On voit que nous n'avons aucun individu ayant à la fois fait de l'hypertension et eu des irritations utérines, ce qui empêchera certaines analyses. De plus, le relativement faible nombre d'individus ayant des antécédents d'hypertension ou d'irritabilité utérine diminuera la fiabilité des tests sur l'impact de ces facteurs sur le poids des bébés. On dit ainsi que le plan d'expérience n'est ni complet, ni équilibré.
+
+
+#Analyse à un facteur
+
+Nous voulons commencer par analyser la pertinence de chaque facteur pris individuellement à l'aide d'une analyse de la variance (ANOVA).
+
+
+
+##Race
+
+Analysons d'abord à l'aide d'un boxplot l'impact de la race de la mère sur le poids du bébé : 
+
+```{r facteur race, echo=FALSE}
+
+boxplot(BWT~RACE)
+
+
+```
+
+Il semblerait à première vue que la race de la mère ait un impact sur le poids du bébé. Cependant, avant de procéder à l'ANOVA pour le confirmer, nous devons vérifier que le modèle linéaire gaussien associé est valide.
+
+Nous devons pour cela vérifier plusieurs hypothèses : les résidus sont gaussiens, de même loi et indépendants, nous voulons aussi savoir si nous avons des valeurs aberrantes ou isolés qui fausseraient le modèle.
+
+
+```{r lm race, echo=FALSE}
+race <- as.factor(RACE)
+mod1 <- lm(BWT ~ race)
+
+n <- length(RACE)
+
+res.stud <- rstudent(mod1)
+
+plot((1:n), res.stud, xlab = "ID", ylab="Standardized Residual", ylim=c(-4,3))
+abline(2,0)
+abline(-2,0)
+
+ID <- c((1:n)[res.stud>2 | res.stud < -2])
+text(ID, res.stud[ID], ID, col ="red", pos=1)
+title("Residual vs Index")
+
+plot(mod1)
+
+```
+On peut voir sur le Normal Q-Q que les points sont suffisamment alignés sur la première bissectrice pour accepter l'hypothèse de normalité des résidus, ainsi que l'hypothèse que les résidus suivent la même loi.
+
+On observe qu'il n'y a aucun point dans le dernier graphique dont la valeur dépasse le seuil $\frac{3p}{n} = 0.048$ : on en déduit qu'il n'y a pas de points leviers.
+
+De plus, le premier graphique indique que quelques valeurs sont aberrantes, nous enlèverons les données d'identifiants $131$, $132$ qui sont suffisamment éloignés de la bande $[-2,2]$. 
+
+Cependant, ce graphique montre clairement une structure pour les résidus studentisés, ce qui compromet l'hypothèse d'indépendance.
+
+Nous effectuerons malgré cela une ANOVA en prenant compte que notre modèle est peut-être faux.
+
+
+```{r lm race modif, include=FALSE}
+poids.modif <- poids[c(-131,-132),]
+race.modif <- as.factor(poids.modif$RACE)
+mod1.modif <- lm(poids.modif$BWT ~ race.modif)
+
+```
+L'ANOVA sur le modèle avec deux valeurs supprimés donne :
+
+```{r anova race, echo=FALSE}
+
+fit <- aov(mod1.modif)
+summary(fit)
+
+```
+
+On conclus par l'ANOVA avec une p-valeur de $0.0049$, que la race a un impact sur le poids du bébé à la naissance.
+
+##Fumeur
+
+Analysons si le fait que la mère fume a un effet sur le poids du bébé à la naissance.
+
+À priori il semblerait que ce soit le cas d'après le boxplot. Nous allons le confirmer avec l'ANOVA.
+
+```{r boxplot smoke, echo=FALSE}
+boxplot(BWT ~ SMOKE)
+
+
+```
+
+
+Vérifions tout d'abord si le modèle linéaire associé est valide. Les graphiques suivant montrent clairement qu'ils y a trois valeurs aberrantes (d'indices $130$, $131$, $132$). Là encore, les valeurs d'indices $131$ et $132$ sont encore aberrantes. Il n'y a pas de points isolés en revanche et les résidus sont gaussiens de même variance. Cependant on observe ici aussi une structure dans les résidus studentisés contredisant l'hypothèse d'indépendance des résidus.
+Nous effectuons donc une ANOVA en enlevant ces trois points.
+
+```{r lm smoke, echo=FALSE}
+smoke <- as.factor(SMOKE)
+mod <- lm(BWT ~ smoke)
+plot(mod)
+
+n <- length(smoke)
+
+res.stud <- rstudent(mod)
+
+plot((1:n), res.stud, xlab = "ID", ylab="Standardized Residual", ylim=c(-4,3))
+abline(2,0)
+abline(-2,0)
+
+ID <- c((1:n)[res.stud>2 | res.stud < -2])
+text(ID, res.stud[ID], ID, col ="red", pos=1)
+title("Residual vs Index")
+
+```
+L'ANOVA sur le modèle modifié est résumé ici :
+
+```{r anova smoke, echo=FALSE}
+poids.modif <- poids[c(-130,-131,-132),]
+SMOKE.modif <- poids.modif$SMOKE
+mod.modif <- lm(poids.modif$BWT ~ SMOKE.modif)
+
+fit <- aov(mod.modif)
+summary(fit)
+
+```
+
+On conclut que le fait que la mère fume a un impact sur le poids du bébé à la naissance.
+
+##Irritabilité Utérine
+Il semblerait que le facteur UI ait lui aussi un effet sur le poids.
+
+```{r boxplot ui, echo=FALSE}
+boxplot(BWT ~ UI)
+```
+
+Ici encore, les graphiques montrent qu'il y a trois valeurs aberrantes : nous les supprimons donc du modèle linéaire avant de faire l'ANOVA. Cependant on observe ici aussi une structure dans les résidus studentisés contredisant l'hypothèse d'indépendance des résidus.
+
+
+```{r lm ui, echo=FALSE}
+ui <- as.factor(UI)
+mod <- lm(BWT ~ ui)
+plot(mod)
+n <- length(ui)
+
+res.stud <- rstudent(mod)
+
+plot((1:n), res.stud, xlab = "ID", ylab="Standardized Residual", ylim=c(-4,3))
+abline(2,0)
+abline(-2,0)
+
+ID <- c((1:n)[res.stud>2 | res.stud < -2])
+text(ID, res.stud[ID], ID, col ="red", pos=1)
+title("Residual vs Index")
+
+```
+
+L'ANOVA donne :
+```{r anova ui, echo=FALSE}
+
+
+fit <- aov(mod)
+summary(fit)
+
+```
+
+On conclut par l'ANOVA que l'irritabilité utérine a un effet sur le poids du bébé à la naissance.
+
+##Haute tension
+
+Il s'emblerait que le facteur HT ait un effet sur le poids.
+
+```{r boxplot ht, echo=FALSE}
+boxplot(BWT ~ HT)
+```
+
+On retire ici trois valeurs aberrantes du modèle avant de faire l'ANOVA : celles d'indices $130$,$131$ et $132$. On note que les résidus ne sont là encore pas indépendants et que le modèle ne sera de toutes façons pas parfait.
+
+```{r lm ht, echo=FALSE}
+ht <- as.factor(HT)
+mod <- lm(BWT ~ ht)
+plot(mod)
+
+n <- length(ht)
+
+res.stud <- rstudent(mod)
+
+plot((1:n), res.stud, xlab = "ID", ylab="Standardized Residual", ylim=c(-4,3))
+abline(2,0)
+abline(-2,0)
+
+text(ID, res.stud[ID], ID, col ="red", pos=1)
+title("Residual vs Index")
+poids.modif <- poids[c(-130,-131,-132),]
+HT.modif <- poids.modif$HT
+mod.modif <- lm(poids.modif$BWT ~ HT.modif)
+```
+
+L'ANOVA donne :
+
+```{r anova ht, echo=FALSE}
+fit <- aov(mod.modif)
+summary(fit)
+
+```
+
+On en conclut par qu'une haute tension a un effet sur le poids du bébé à la naissance.
+
+
+#Analyse à deux facteurs
+
+Intéressons-nous maintenant à l’analyse du poids en fonction de deux paramètres : le tabagisme et la race. Pour cela, commençons par analyser un graphique du poids du bébé en fonction de la race de la mère et de son tabagisme durant la grossesse.
+
+```{r plot 2 facteurs, echo=FALSE}
+with(poids,interaction.plot(RACE,SMOKE,BWT))
+```
+
+Le fait de fumer diminue considérablement le poids du bébé pour les races 1 et 2. On peut aussi remarquer que si pour les non-fumeurs, la moyenne des poids est la même pour les race 2 et 3, pour les fumeurs, la moyenne de la race 2 est bien plus faible que celle de la race 3.
+
+Il semblerait donc à première vue que l'interaction de ces deux facteurs aurait un effet. Vérifions cela à l'aide d'une ANOVA, après avoir validé le modèle linéaire.
+
+```{r lm 2 facteurs, echo=FALSE}
+
+mod <- lm(BWT ~ SMOKE*race)
+
+n <- length(RACE)
+
+res.stud <- rstudent(mod)
+
+plot((1:n), res.stud, xlab = "ID", ylab="Standardized Residual", ylim=c(-4,3))
+abline(2,0)
+abline(-2,0)
+
+ID <- c((1:n)[res.stud>2 | res.stud < -2])
+text(ID, res.stud[ID], ID, col ="red", pos=1)
+title("Residual vs Index")
+
+plot(mod)
+
+```
+
+On conclut de ces graphiques que : les résidus sont normaux de même loi, mais pas indépendants car une structure se dégage des résidus studentisés ; nous avons quelques valeurs aberrantes, mais pas suffisamment fortes compte tenus de la taille de nos données pour être enlevés ; que pour le seuil $\frac{3p}{n}=0.095$, nous avons une dizaine de points leviers et que nous n'avons pas de points suspects pour la distance de Cook.
+
+Nous effectuerons donc notre ANOVA en prenant compte que notre modèle n'est pas parfait.
+
+
+
+```{r Anova 2 facteurs, echo=FALSE}
+anova(mod)
+
+```
+
+Au vus des résultats de l'ANOVA, puisque nous avons une p-valeur non significative de 0.11, l'interaction fumeur et race n'a pas vraiment d'impact significatif sur le poids du bébé : on peut considérer que seul le tabagisme et la race influent sur le poids dans ce cas.
+
+```{r mod sans interractions, echo=FALSE}
+mod <- lm(BWT ~ SMOKE + race)
+anova(mod)
+
+```
+
+On confirme ainsi que le tabagisme et la race ont bien un effet significatif sur le poids du bébé dans notre modèle.
+
+#Autre modèle à deux facteurs
+
+##Première observation
+
+Intéressons-nous maintenant à d'autres modèles à 3 facteurs : UI-SMOKE, HT-RACE et UI-HT. Pour cela, commençons par analyser les graphiques suivants : 
+
+```{r smoke et ui, echo=FALSE}
+with(poids,interaction.plot(SMOKE,UI,BWT))
+```
+
+On peut voir sur ce graphique que la tendance du poids des bébés en fonction du tabagisme de la mère est modifié par la présence d'irritation utérine, ce qui pourrait suggérer un impact de l'interaction.
+
+
+```{r race et ht, echo=FALSE}
+with(poids,interaction.plot(RACE,HT,BWT))
+```
+
+On voit un phénomène similaire sur ce graphique, qui suggèrerait de même l'impact de l'interaction sur le poids du bébé.
+
+```{r ui et ht, echo=FALSE}
+with(poids,interaction.plot(UI,HT,BWT,type="b"))
+```
+Malheureusement, ce graphique ne peut pas être interprété car, comme le montre le tableau d'expérience en début de rapport, nous n'avons aucun individu avec des antécédents d'hypertension et d'irritabilité utérine, ce qui empêche l'observation d'une différence de tendance.
+
+##ANOVA
+
+Faisons maintenant des ANOVA pour vérifier si les facteurs dans les deux premiers modèles sont indépendants, sachant que nous n'avons pas les données nécessaires pour faire ce travail sur le troisième modèle. Pour chaque modèle, nous ferons une ANOVA du modèle initial, et d'un modèle supposé sans interaction.
+
+ANOVA pour le modèle SMOKE-UI
+
+```{r anova smoke ui, echo=FALSE}
+mod <- lm(BWT ~ SMOKE*UI)
+anova(mod)
+
+mod.inter <- lm(BWT ~ SMOKE + UI)
+anova(mod.inter)
+
+```
+
+Avec une p-valeur non significatif de $0.34$, il est raisonnable de considérer l'effet de ces deux facteurs comme étant nul. D'ailleurs la suppression de cette interaction ne modifie pas significativement les p-value des autres tests. De plus, l'ANOVA nous indique que, dans un modèle où l'on considère uniquement les facteurs UI et SMOKE, le premier aurait un effet plus important sur le poids du bébé.
+
+
+Anova pour le modèle RACE-HT
+```{r anova race ht, echo=FALSE}
+
+mod <- lm(BWT ~ race*HT)
+anova(mod)
+
+mod.inter <- lm(BWT ~ race + HT)
+anova(mod.inter)
+
+```
+De même, nous pouvons considérer qu'il n'y pas d'interaction entre les facteurs RACE et HT. De plus, dans un modèle où l'on considère uniquement les facteurs RACE et HT, le premier facteur est plus significatif que le second pour modéliser le poids du bébé.
+
+
+ANOVA pour le modèle HT-UI
+```{r anova ht ui, echo=FALSE}
+mod <- lm(BWT ~ HT*UI)
+anova(mod)
+
+
+```
+
+Si on ne peut pas se prononcer quand à un éventuel effet de l'interaction de ces deux facteurs, nous pouvons cependant conclure que, dans un modèle utilisant les facteurs UI et HT, le premier est le plus significatif. 
+
+
+## Critère de sélection de modèle
+
+Nous allons à présent sélectionner le modèle à privilégier selon le critère $R_a^2$ : nous sélectionnerons le modèle avec la valeur $R_a^2$ la plus élevé, modèle que nous supposons sans interactions, ce qui est en accord avec les ANOVA précédents.
+
+```{r critère Ra2, echo=FALSE}
+summary(lm(BWT ~ SMOKE + race))
+summary(lm(BWT ~ SMOKE + UI))
+summary(lm(BWT ~ race + HT))
+summary(lm(BWT ~ HT + UI))
+
+```
+
+Ainsi, si nous prenons comme critère le $R_{a}^{2}$ ajusté, nous gardons le modèle SMOKE-RACE, considéré sans interaction. Le choix serait le même avec le critère $R^2$. Il faut cependant se souvenir que le modèle retenu n'est pas parfait, en particulier que les résidus ne sont pas indépendants. Il pourrait donc être intéressant de modéliser le poids des bébés à l'aide de ces deux facteurs dans un modèle plus général que celui des régressions linéaires gaussiennes. De plus, il faudrait faire des tests supplémentaires avec de nouvelles données pour vérifier qu'un modèle à seulement deux facteurs est suffisant pour pouvoir prédire le poids des bébés.
+
+```{r detach, include=FALSE}
+detach(poids)
+```
+
